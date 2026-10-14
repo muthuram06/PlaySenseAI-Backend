@@ -7,7 +7,6 @@ const chatRoutes = require("./routes/chat");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-
 app.use(
   cors({
     origin: [
@@ -17,7 +16,6 @@ app.use(
     ],
   })
 );
-
 
 app.use(express.json({ limit: "20kb" }));
 

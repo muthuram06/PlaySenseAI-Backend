@@ -2,10 +2,11 @@
 const { GoogleGenAI } = require("@google/genai");
 
 const apiKey = process.env.GEMINI_API_KEY;
-const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const modelName = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
+// Fictional demo match data for PlaySense AI.
 const match = {
   battingTeam: "Metro Falcons",
   bowlingTeam: "Coastal Titans",
@@ -39,34 +40,85 @@ const players = [
   },
 ];
 
-// Used when Gemini is unavailable or not configured.
+// Local responses keep chat functional when Gemini is unavailable.
 function localAnswer(question) {
   const q = question.toLowerCase();
 
   if (q.includes("strike rate")) {
-    return "Strike rate measures runs scored per 100 balls. A strike rate of 170.59 means approximately 171 runs per 100 balls faced. In T20 cricket, that is an aggressive scoring rate. Arjun Mehta's 58 runs from 34 balls in our fictional demo match gives a strike rate of about 170.59.";
+    return (
+      "Strike rate measures runs scored per 100 balls. " +
+      "A strike rate of 170.59 means approximately 171 runs per " +
+      "100 balls faced. In T20 cricket, that is an aggressive scoring " +
+      "rate. Arjun Mehta's 58 runs from 34 balls in our fictional " +
+      "demo match gives him a strike rate of about 170.59."
+    );
   }
 
   if (q.includes("run rate") || q.includes("current rate")) {
-    return `The current run rate is ${match.currentRunRate} runs per over. Metro Falcons have scored ${match.score}/${match.wickets} after ${match.overs} overs in this fictional demo match.`;
+    return (
+      `The current run rate is ${match.currentRunRate} runs per over. ` +
+      `${match.battingTeam} have scored ${match.score}/${match.wickets} ` +
+      `after ${match.overs} overs in this fictional demo match.`
+    );
   }
 
-  if (q.includes("top scorer") || q.includes("most runs") || q.includes("highest scorer")) {
-    return "Arjun Mehta is the leading scorer in our fictional demo data, with 58 runs from 34 balls.";
+  if (
+    q.includes("top scorer") ||
+    q.includes("most runs") ||
+    q.includes("highest scorer")
+  ) {
+    return (
+      "Arjun Mehta is the leading scorer in our fictional demo data, " +
+      "with 58 runs from 34 balls."
+    );
   }
 
-  if (q.includes("score") || q.includes("match situation")) {
-    return `In the fictional demo match, Metro Falcons are ${match.score}/${match.wickets} after ${match.overs} overs. Their current run rate is ${match.currentRunRate}. The position suggests a scoring pace of about 9.69 runs per over, but the final total depends on the remaining overs and wickets.`;
+  if (
+    q.includes("strategy") ||
+    q.includes("what should") ||
+    q.includes("batting plan")
+  ) {
+    return (
+      "At 126/3 after 13 overs, the fictional Metro Falcons have " +
+      "7 overs remaining. A possible strategy is to preserve wickets " +
+      "while targeting scoring opportunities against weaker deliveries. " +
+      "The ideal approach depends on the batters at the crease, pitch " +
+      "conditions and bowling matchups."
+    );
+  }
+
+  if (
+    q.includes("score") ||
+    q.includes("match situation") ||
+    q.includes("match summary")
+  ) {
+    return (
+      `In the fictional demo match, ${match.battingTeam} are ` +
+      `${match.score}/${match.wickets} after ${match.overs} overs. ` +
+      `Their current run rate is ${match.currentRunRate}. ` +
+      "The final total depends on the remaining overs, wickets and " +
+      "batting conditions."
+    );
   }
 
   if (q.includes("t20") || q.includes("twenty20")) {
-    return "T20 cricket gives each team a maximum of 20 overs. Batters often aim to score quickly, while bowlers try to limit runs and take wickets. Strategy depends on the score, wickets remaining, pitch conditions and overs left.";
+    return (
+      "T20 cricket gives each team a maximum of 20 overs. Batters " +
+      "often aim to score quickly, while bowlers try to limit runs " +
+      "and take wickets. Strategy depends on the score, wickets " +
+      "remaining, pitch conditions and overs left."
+    );
   }
 
-  return "I can explain cricket rules, strike rates, run rates, player statistics and match situations. Try asking about the demo score, the top scorer or what a strike rate means.";
+  return (
+    "I can explain cricket rules, strike rates, run rates, player " +
+    "statistics and match situations. Try asking about the demo score, " +
+    "the top scorer or a possible batting strategy."
+  );
 }
 
 async function answerQuestion(question) {
+  // Use local answers if no API key is configured.
   if (!ai) {
     return {
       answer: localAnswer(question),
@@ -98,44 +150,70 @@ User question:
 ${question}
 `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: prompt,
-      config: {
-        temperature: 0.4,
-        maxOutputTokens: 350,
-      },
-    });
+  const maxAttempts = 2;
 
-    const answer = response.text?.trim();
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          maxOutputTokens: 350,
+        },
+      });
 
-    if (!answer) {
-      throw new Error("Gemini returned an empty response.");
+      const answer = response.text?.trim();
+
+      if (!answer) {
+        throw new Error("Gemini returned an empty response.");
+      }
+
+      return {
+        answer,
+        source: "gemini",
+        isDemoData: true,
+      };
+    } catch (error) {
+      console.error("Gemini API error details:", {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+        attempt,
+      });
+
+      const status = Number(error.status || error.code);
+
+      const isTemporary =
+        status === 429 ||
+        status === 500 ||
+        status === 502 ||
+        status === 503 ||
+        status === 504;
+
+      // Retry temporary service errors once after a short delay.
+      if (isTemporary && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        continue;
+      }
+
+      // Don't retry indefinitely; keep the chat usable.
+      return {
+        answer:
+          localAnswer(question) +
+          "\n\nNote: Gemini is temporarily unavailable, " +
+          "so this answer uses local demo logic.",
+        source: "local-fallback",
+        isDemoData: true,
+      };
     }
-
-    return {
-      answer,
-      source: "gemini",
-      isDemoData: true,
-    };
-  } catch (error) {
-    // Log details in the backend terminal for debugging.
-    console.error("Gemini API error details:", {
-      message: error.message,
-      status: error.status,
-      code: error.code,
-    });
-
-    // Keep the chat usable when the API fails.
-    return {
-      answer:
-        localAnswer(question) +
-        "\n\nNote: Gemini is temporarily unavailable, so this answer uses local demo logic.",
-      source: "local-fallback",
-      isDemoData: true,
-    };
   }
+
+  // Safety fallback if both attempts fail unexpectedly.
+  return {
+    answer: localAnswer(question),
+    source: "local-fallback",
+    isDemoData: true,
+  };
 }
 
 module.exports = { answerQuestion };

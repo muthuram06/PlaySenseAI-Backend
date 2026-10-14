@@ -7,14 +7,17 @@ const chatRoutes = require("./routes/chat");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+
 app.use(
   cors({
     origin: [
       "http://localhost:5173",
       "http://127.0.0.1:5173",
+      "https://play-sense-ai.vercel.app",
     ],
   })
 );
+
 
 app.use(express.json({ limit: "20kb" }));
 
